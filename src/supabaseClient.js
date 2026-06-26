@@ -1,9 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Supabaseプロジェクトの情報
-// ※ Vercelにデプロイする際は環境変数(.env)に移すのが望ましいですが、
-//    まずは動作確認のため直接記述しています。
 const SUPABASE_URL = "https://gauhclpucrumctcxmepg.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_FxyTcH_63zYv5Jb2pJHH_w_p5ojPaTe";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdhdWhjbHB1Y3J1bWN0Y3htZXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTA2NDgsImV4cCI6MjA5NzU2NjY0OH0.86N0Sf_QS-wPZvYbB9BTiXClGbQNNfa_-KA-jA2soN8";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
