@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
 // ── 定数 ────────────────────────────────────────────────
@@ -203,10 +203,10 @@ export default function App() {
   };
 
   const hasPrevEntries = entries.some(e => e.entry_date === prevDate(filterDate));
-  const hasCurrentEntries = filtered.length > 0;
 
   // ── データ取得 ──────────────────────────────────────────
-  const fetchAll = useCallback(async () => {
+  const fetchAllRef = useRef(null);
+  fetchAllRef.current = async () => {
     setLoading(true);
     setErrorMsg("");
     const [{ data: entryData, error: entryErr }, { data: machineData, error: machineErr }] = await Promise.all([
@@ -218,19 +218,20 @@ export default function App() {
     setEntries(entryData || []);
     setMachines(machineData || []);
     setLoading(false);
-  }, []);
+  };
+  const fetchAll = () => fetchAllRef.current();
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { fetchAll(); }, []); // eslint-disable-line
 
   // ── リアルタイム同期（他の人の更新も自動反映） ─────────────
   useEffect(() => {
     const channel = supabase
       .channel("realtime-entries")
-      .on("postgres_changes", { event: "*", schema: "public", table: "entries" }, () => fetchAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "machines" }, () => fetchAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "entries" }, () => fetchAllRef.current())
+      .on("postgres_changes", { event: "*", schema: "public", table: "machines" }, () => fetchAllRef.current())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchAll]);
+  }, []); // eslint-disable-line
 
   // ── entries 操作 ────────────────────────────────────────
   const update = async (id, field, val) => {
@@ -311,6 +312,7 @@ export default function App() {
 
   // ── 集計 ────────────────────────────────────────────────
   const filtered = entries.filter(e => e.entry_date === filterDate);
+  const hasCurrentEntries = filtered.length > 0;
   const done = filtered.filter(e => e.status === "記入済").length;
   const workedCount = filtered.filter(e => e.attendance === "出勤").length;
   const offCount = filtered.filter(e => e.attendance === "休み").length;
