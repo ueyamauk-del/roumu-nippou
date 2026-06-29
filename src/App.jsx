@@ -339,10 +339,19 @@ export default function App() {
   }, [entries, rangeFrom, rangeTo]);
 
   const navBtn=(active)=>({
-    padding:"6px 14px",borderRadius:6,border:"none",cursor:"pointer",
-    fontWeight:active?700:400,fontSize:13,
-    background:active?C.accent:"transparent",
-    color:active?"#1A1F2E":C.muted,transition:"all 0.15s",
+    flex:1,
+    padding:"10px 4px",
+    borderRadius:0,
+    border:"none",
+    cursor:"pointer",
+    fontWeight:active?700:400,
+    fontSize:12,
+    background:"transparent",
+    color:active?C.accent:C.muted,
+    borderBottom:active?`2px solid ${C.accent}`:"2px solid transparent",
+    transition:"all 0.15s",
+    whiteSpace:"nowrap",
+    minWidth:0,
   });
 
   if (loading) {
@@ -358,12 +367,15 @@ export default function App() {
       onClick={()=>setMachinePickerFor(null)}>
 
       {/* ヘッダー */}
-      <header style={{background:C.surface,borderBottom:`3px solid ${C.accent}`,padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52,position:"sticky",top:0,zIndex:100,flexWrap:"wrap",gap:8}}>
-        <div style={{fontSize:17,fontWeight:700,color:C.accent,display:"flex",alignItems:"center",gap:6}}>
-          <span>🏗</span><span>労務日報</span>
+      <header style={{background:C.surface,borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:100}}>
+        {/* ロゴ行 */}
+        <div style={{padding:"10px 16px",borderBottom:`3px solid ${C.accent}`,display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:18}}>🏗</span>
+          <span style={{fontSize:16,fontWeight:700,color:C.accent}}>労務日報</span>
         </div>
-        <nav style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-          {[["attendance","出退勤入力"],["machines","機械管理"],["summary","複数日集計"],["report","日報一覧"]].map(([v,label])=>(
+        {/* タブ行：画面幅いっぱいに均等配置 */}
+        <nav style={{display:"flex",width:"100%",borderBottom:`1px solid ${C.border}`}}>
+          {[["attendance","出退勤"],["machines","機械管理"],["summary","集計"],["report","日報一覧"]].map(([v,label])=>(
             <button key={v} style={navBtn(view===v)} onClick={()=>setView(v)}>{label}</button>
           ))}
         </nav>
