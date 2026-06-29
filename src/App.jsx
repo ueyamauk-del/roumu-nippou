@@ -60,7 +60,7 @@ const printAttendancePDF = (entries, dateFrom, dateTo) => {
   lines.push('table{width:100%;border-collapse:collapse;table-layout:fixed;}');
   lines.push('th,td{border:1px solid #666;text-align:center;vertical-align:middle;overflow:hidden;}');
   lines.push('.name-col{width:76px;text-align:left;padding:2px 4px;font-weight:700;font-size:10px;}');
-  lines.push('.day-col{width:24px;padding:1px;}');
+  lines.push('.day-col{width:26px;padding:2px 1px;font-weight:700;font-size:11px;}');
   lines.push('.sum-col{width:36px;font-weight:700;font-size:10px;padding:2px;}');
   lines.push('thead th{background:#1A1F2E;color:#fff;font-weight:700;font-size:9px;padding:3px 1px;}');
   lines.push('.sym-row td{height:22px;font-size:14px;font-weight:700;padding:1px;}');
@@ -69,8 +69,8 @@ const printAttendancePDF = (entries, dateFrom, dateTo) => {
   lines.push('.ot-row td{height:14px;font-size:9px;color:#c60;padding:1px;border-top:none;}');
   lines.push('.ot-row .name-col{font-size:8px;color:#888;font-weight:400;border-top:none;}');
   lines.push('tfoot td{background:#f0f0f0;font-weight:700;font-size:10px;padding:3px 1px;}');
-  lines.push('.sun{background:#fff0f0;}.sat{background:#f0f4ff;}');
-  lines.push('thead th.sun{background:#c0392b;color:#fff;}thead th.sat{background:#2980b9;color:#fff;}');
+  lines.push('.sun{background:#ffcccc;}.sat{background:#cce0ff;}');
+  lines.push('thead th.sun{background:#e74c3c;color:#fff;font-weight:800;}thead th.sat{background:#2980b9;color:#fff;font-weight:800;}');
   lines.push('@media print{@page{size:A3 landscape;margin:8mm 6mm;}}');
   lines.push('</style></head><body>');
   lines.push('<h1>' + yearMonth + '　出　勤　簿　表</h1>');
