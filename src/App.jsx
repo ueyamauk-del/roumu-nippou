@@ -132,15 +132,20 @@ const printAttendancePDF = (entries, dateFrom, dateTo) => {
   lines.push('</body></html>');
 
   const html = lines.join("");
-  const blob = new Blob([html], {type: "text/html;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "出勤簿_" + dateFrom + "_" + dateTo + ".html";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  const encoded = encodeURIComponent(html);
+  const dataUri = "data:text/html;charset=utf-8," + encoded;
+  const w = window.open(dataUri, "_blank");
+  if (!w) {
+    // ポップアップブロックされた場合はリンクを作成
+    const a = document.createElement("a");
+    a.href = dataUri;
+    a.target = "_blank";
+    a.textContent = "出勤簿を開く";
+    a.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#E8A838;color:#111;padding:16px 24px;border-radius:8px;font-size:16px;text-decoration:none;font-weight:700;";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => document.body.removeChild(a), 5000);
+  }
 };
 
 
@@ -261,16 +266,19 @@ const printPDF = (entries, machines, dateFrom, dateTo, mode) => {
   }
 
   html+=`</body></html>`;
-  const blob = new Blob([html], {type: "text/html;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  const fname = mode === "summary" ? "集計PDF_" : "日報_";
-  a.download = fname + dateFrom + "_" + dateTo + ".html";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  const encoded = encodeURIComponent(html);
+  const dataUri = "data:text/html;charset=utf-8," + encoded;
+  const w = window.open(dataUri, "_blank");
+  if (!w) {
+    const a = document.createElement("a");
+    a.href = dataUri;
+    a.target = "_blank";
+    a.textContent = "PDFを開く";
+    a.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#A78BFA;color:#fff;padding:16px 24px;border-radius:8px;font-size:16px;text-decoration:none;font-weight:700;";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => document.body.removeChild(a), 5000);
+  }
 };
 
 // ── メインアプリ ──────────────────────────────────────────
