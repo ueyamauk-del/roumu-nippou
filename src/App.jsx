@@ -131,10 +131,16 @@ const printAttendancePDF = (entries, dateFrom, dateTo) => {
   lines.push('<div style="margin-top:6px;font-size:8px;color:#666;">記号：○出勤　休=休み　忌=忌引　有=有給休暇　欠=欠勤</div>');
   lines.push('</body></html>');
 
-  const w = window.open("","_blank","width=1400,height=800");
-  w.document.write(lines.join(""));
-  w.document.close();
-  w.onload = () => { w.focus(); w.print(); };
+  const html = lines.join("");
+  const blob = new Blob([html], {type: "text/html;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "出勤簿_" + dateFrom + "_" + dateTo + ".html";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
 };
 
 
@@ -255,10 +261,16 @@ const printPDF = (entries, machines, dateFrom, dateTo, mode) => {
   }
 
   html+=`</body></html>`;
-  const w=window.open("","_blank","width=900,height=700");
-  w.document.write(html);
-  w.document.close();
-  w.onload=()=>{ w.focus(); w.print(); };
+  const blob = new Blob([html], {type: "text/html;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const fname = mode === "summary" ? "集計PDF_" : "日報_";
+  a.download = fname + dateFrom + "_" + dateTo + ".html";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
 };
 
 // ── メインアプリ ──────────────────────────────────────────
