@@ -2,7 +2,18 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
 // ── 定数 ────────────────────────────────────────────────
-const ATTENDANCE_OPTIONS = ["出勤", "休み"];
+const ATTENDANCE_OPTIONS = ["出勤", "休み", "忌引", "有休", "欠勤"];
+
+// 出勤状況の記号変換
+const ATTENDANCE_SYMBOL = {
+  "出勤": "○",
+  "休み": "休",
+  "忌引": "忌",
+  "有休": "有",
+  "欠勤": "欠",
+};
+// 出勤扱いかどうか
+const isWorked = a => a === "出勤";
 
 const todayStr = () => {
   const d = new Date();
@@ -17,6 +28,141 @@ const C={
   blue:"#5B9CF6",purple:"#A78BFA",text:"#E8ECF4",muted:"#8A94AE",inputBg:"#1A1F2E",
 };
 const bInp={background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"7px 10px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"};
+
+// ── 月次出勤簿PDF ─────────────────────────────────────────
+const printAttendancePDF = (entries, dateFrom, dateTo) => {
+  const range = entries.filter(e => e.entry_date >= dateFrom && e.entry_date <= dateTo);
+
+  // 日付一覧を生成
+  const dates = [];
+  const cur = new Date(dateFrom);
+  const end = new Date(dateTo);
+  while (cur <= end) {
+    dates.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  // 作業員一覧（登場順）
+  const workers = [...new Set(range.map(e => e.worker_name))];
+
+  // 現場名（最も多く使われているもの）
+  const siteCounts = {};
+  range.forEach(e => { if(e.site) siteCounts[e.site] = (siteCounts[e.site]||0) + 1; });
+  const topSite = Object.entries(siteCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || "";
+
+  // 年月表示
+  const fromD = new Date(dateFrom);
+  const toD = new Date(dateTo);
+  const yearMonth = fromD.getFullYear() === toD.getFullYear() && fromD.getMonth() === toD.getMonth()
+    ? `令和${fromD.getFullYear()-2018}年 ${fromD.getMonth()+1}月分`
+    : `${fromD.getFullYear()}.${fromD.getMonth()+1} ～ ${toD.getFullYear()}.${toD.getMonth()+1}`;
+
+  // entryマップ
+  const entryMap = {};
+  range.forEach(e => {
+    const key = `${e.entry_date}_${e.worker_name}`;
+    entryMap[key] = e;
+  });
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>出勤簿</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;font-size:9px;color:#111;}
+    h1{font-size:13px;text-align:center;margin-bottom:2px;font-weight:700;}
+    .meta{text-align:center;font-size:9px;color:#444;margin-bottom:6px;}
+    .company{font-size:10px;text-align:right;margin-bottom:6px;}
+    table{width:100%;border-collapse:collapse;font-size:8px;}
+    th,td{border:1px solid #999;padding:2px 3px;text-align:center;white-space:nowrap;}
+    th{background:#1A1F2E;color:#fff;font-weight:600;}
+    .name-col{text-align:left;font-weight:600;min-width:60px;max-width:80px;}
+    .sun{background:#fff0f0;}
+    .sat{background:#f0f0ff;}
+    .worked{color:#111;}
+    .off{color:#888;}
+    .special{color:#c00;font-weight:700;}
+    .summary{font-weight:700;}
+    .ot{color:#c60;font-size:7px;}
+    tfoot td{background:#f5f5f5;font-weight:700;}
+    @media print{@page{size:A3 landscape;margin:8mm 6mm;}body{font-size:8px;}}
+  </style></head><body>
+  <h1>${yearMonth}　出　勤　簿</h1>
+  <div class="meta">現場名：${topSite||"　　　　　　"}&emsp;&emsp;期間：${dateFrom} ～ ${dateTo}</div>
+  <div class="company">有限会社カネヤマ上山建設</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="name-col">氏　名</th>
+        ${dates.map(d => {
+          const dd = new Date(d);
+          const day = dd.getDate();
+          const dow = dd.getDay();
+          const cls = dow===0?"sun":dow===6?"sat":"";
+          const dowStr = ["日","月","火","水","木","金","土"][dow];
+          return `<th class="${cls}">${day}<br><span style="font-size:7px">${dowStr}</span></th>`;
+        }).join("")}
+        <th>出勤<br>日数</th>
+        <th>残業<br>合計</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${workers.map(name => {
+        const workedDays = dates.filter(d => {
+          const e = entryMap[`${d}_${name}`];
+          return e && isWorked(e.attendance);
+        }).length;
+        const totalOT = dates.reduce((s,d) => {
+          const e = entryMap[`${d}_${name}`];
+          return s + (e ? parseFloat(e.overtime_hours)||0 : 0);
+        }, 0);
+        return `<tr>
+          <td class="name-col">${name}</td>
+          ${dates.map(d => {
+            const dd = new Date(d);
+            const dow = dd.getDay();
+            const cls = dow===0?"sun":dow===6?"sat":"";
+            const e = entryMap[`${d}_${name}`];
+            if (!e) return `<td class="${cls} off">－</td>`;
+            const sym = ATTENDANCE_SYMBOL[e.attendance] || "○";
+            const ot = parseFloat(e.overtime_hours)||0;
+            const symCls = e.attendance==="出勤"?"worked":(e.attendance==="休み"?"off":"special");
+            return `<td class="${cls}">
+              <span class="${symCls}">${sym}</span>
+              ${ot>0?`<br><span class="ot">${ot}h</span>`:""}
+            </td>`;
+          }).join("")}
+          <td class="summary">${workedDays}</td>
+          <td class="summary">${totalOT>0?totalOT.toFixed(1)+"h":"－"}</td>
+        </tr>`;
+      }).join("")}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td class="name-col">出勤人数</td>
+        ${dates.map(d => {
+          const cnt = workers.filter(n => {
+            const e = entryMap[`${d}_${n}`];
+            return e && isWorked(e.attendance);
+          }).length;
+          const dd = new Date(d);
+          const dow = dd.getDay();
+          const cls = dow===0?"sun":dow===6?"sat":"";
+          return `<td class="${cls}">${cnt>0?cnt:"－"}</td>`;
+        }).join("")}
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+  </table>
+  <div style="margin-top:8px;font-size:8px;color:#666;">
+    記号：○出勤　休=休み　忌=忌引　有=有給休暇　欠=欠勤　△=半日
+  </div>
+  </body></html>`;
+
+  const w = window.open("","_blank","width=1200,height=700");
+  w.document.write(html);
+  w.document.close();
+  w.onload = () => { w.focus(); w.print(); };
+};
 
 // ── PDF生成（ブラウザ印刷） ───────────────────────────────
 const printPDF = (entries, machines, dateFrom, dateTo, mode) => {
@@ -443,21 +589,25 @@ export default function App() {
               {filtered.map(e=>{
                 const usedMs=machines.filter(m=>(e.machine_ids||[]).includes(m.id));
                 const pickerOpen=machinePickerFor===e.id;
-                const isOff = e.attendance === "休み";
+                const isOff = e.attendance !== "出勤";
                 return (
                   <div key={e.id} style={{background:C.card,border:`1px solid ${e.status==="記入済"?C.green+"66":C.border}`,borderRadius:10,padding:14,position:"relative",opacity:isOff?0.75:1}}>
                     <button onClick={()=>setDeleteTarget(e.id)} style={{position:"absolute",top:9,right:9,background:"transparent",border:"none",color:C.muted,cursor:"pointer",fontSize:15,padding:2}}>✕</button>
                     <div style={{display:"inline-block",padding:"2px 8px",borderRadius:99,fontSize:11,fontWeight:700,background:e.status==="記入済"?C.green+"22":"#3A4460",color:e.status==="記入済"?C.green:C.muted,marginBottom:7}}>{e.status}</div>
                     <div style={{fontWeight:700,fontSize:15,marginBottom:9,paddingRight:22}}>{e.worker_name}</div>
 
-                    {/* 出勤/休み トグル */}
-                    <div style={{display:"flex",gap:6,marginBottom:9}}>
-                      {ATTENDANCE_OPTIONS.map(opt=>(
-                        <button key={opt} onClick={()=>update(e.id,"attendance",opt)}
-                          style={{flex:1,padding:"7px 0",borderRadius:7,border:`1px solid ${e.attendance===opt?(opt==="出勤"?C.green:C.muted):C.border}`,cursor:"pointer",fontWeight:700,fontSize:13,background:e.attendance===opt?(opt==="出勤"?C.green+"22":C.border):"transparent",color:e.attendance===opt?(opt==="出勤"?C.green:C.text):C.muted}}>
-                          {opt==="出勤"?"✓ 出勤":"休み"}
-                        </button>
-                      ))}
+                    {/* 出勤状況 選択 */}
+                    <div style={{display:"flex",gap:4,marginBottom:9,flexWrap:"wrap"}}>
+                      {ATTENDANCE_OPTIONS.map(opt=>{
+                        const isSelected = e.attendance===opt;
+                        const color = opt==="出勤"?C.green:opt==="休み"?C.muted:C.red;
+                        return (
+                          <button key={opt} onClick={()=>update(e.id,"attendance",opt)}
+                            style={{flex:"1 1 auto",padding:"6px 4px",borderRadius:6,border:`1px solid ${isSelected?color:C.border}`,cursor:"pointer",fontWeight:isSelected?700:400,fontSize:11,background:isSelected?color+"22":"transparent",color:isSelected?color:C.muted,minWidth:40}}>
+                            {opt==="出勤"?"✓ 出勤":opt}
+                          </button>
+                        );
+                      })}
                     </div>
 
                     {!isOff && <>
@@ -586,7 +736,7 @@ export default function App() {
               <span style={{color:C.muted}}>〜</span>
               <input type="date" value={rangeTo} onChange={e=>setRangeTo(e.target.value)}
                 style={{background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"6px 10px",fontSize:13,outline:"none"}}/>
-              <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+              <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
                 <button onClick={()=>printPDF(entries,machines,rangeFrom,rangeTo,"daily")}
                   style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${C.purple}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.purple}}>
                   🖨 日別PDF
@@ -594,6 +744,10 @@ export default function App() {
                 <button onClick={()=>printPDF(entries,machines,rangeFrom,rangeTo,"summary")}
                   style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.purple,color:"#fff"}}>
                   🖨 集計PDF
+                </button>
+                <button onClick={()=>printAttendancePDF(entries,rangeFrom,rangeTo)}
+                  style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.accent,color:"#1A1F2E"}}>
+                  📋 出勤簿PDF
                 </button>
               </div>
             </div>
@@ -716,7 +870,7 @@ export default function App() {
                     ?<tr><td colSpan={8} style={{padding:32,color:C.muted,textAlign:"center"}}>この日の記録はありません</td></tr>
                     :filtered.map(e=>{
                       const ms=machines.filter(m=>(e.machine_ids||[]).includes(m.id));
-                      const isOff = e.attendance === "休み";
+                      const isOff = e.attendance !== "出勤";
                       return(
                         <tr key={e.id} style={{background:e.status==="記入済"?C.green+"08":"transparent"}}>
                           <td style={{padding:"9px 10px",borderBottom:`1px solid ${C.border}44`,fontWeight:600,whiteSpace:"nowrap"}}>{e.worker_name}</td>
