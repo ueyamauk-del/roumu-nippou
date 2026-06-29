@@ -29,140 +29,114 @@ const C={
 };
 const bInp={background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"7px 10px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"};
 
-// ── 月次出勤簿PDF ─────────────────────────────────────────
+// 月次出勤簿PDF
 const printAttendancePDF = (entries, dateFrom, dateTo) => {
   const range = entries.filter(e => e.entry_date >= dateFrom && e.entry_date <= dateTo);
-
-  // 日付一覧を生成
   const dates = [];
   const cur = new Date(dateFrom);
   const end = new Date(dateTo);
-  while (cur <= end) {
-    dates.push(cur.toISOString().slice(0, 10));
-    cur.setDate(cur.getDate() + 1);
-  }
-
-  // 作業員一覧（登場順）
+  while(cur <= end){ dates.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate()+1); }
   const workers = [...new Set(range.map(e => e.worker_name))];
-
-  // 現場名（最も多く使われているもの）
   const siteCounts = {};
-  range.forEach(e => { if(e.site) siteCounts[e.site] = (siteCounts[e.site]||0) + 1; });
+  range.forEach(e => { if(e.site) siteCounts[e.site] = (siteCounts[e.site]||0)+1; });
   const topSite = Object.entries(siteCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || "";
-
-  // 年月表示
   const fromD = new Date(dateFrom);
   const toD = new Date(dateTo);
-  const yearMonth = fromD.getFullYear() === toD.getFullYear() && fromD.getMonth() === toD.getMonth()
-    ? `令和${fromD.getFullYear()-2018}年 ${fromD.getMonth()+1}月分`
-    : `${fromD.getFullYear()}.${fromD.getMonth()+1} ～ ${toD.getFullYear()}.${toD.getMonth()+1}`;
-
-  // entryマップ
+  const nengo = fromD.getFullYear() - 2018;
+  const yearMonth = (fromD.getFullYear()===toD.getFullYear() && fromD.getMonth()===toD.getMonth())
+    ? ("令和" + nengo + "年 " + (fromD.getMonth()+1) + "月分")
+    : (fromD.getFullYear() + "." + (fromD.getMonth()+1) + " 〜 " + toD.getFullYear() + "." + (toD.getMonth()+1));
   const entryMap = {};
-  range.forEach(e => {
-    const key = `${e.entry_date}_${e.worker_name}`;
-    entryMap[key] = e;
+  range.forEach(e => { entryMap[e.entry_date + "_" + e.worker_name] = e; });
+  const DOW = ["日","月","火","水","木","金","土"];
+
+  const lines = [];
+  lines.push('<!DOCTYPE html><html><head><meta charset="utf-8"><title>出勤簿</title>');
+  lines.push('<style>');
+  lines.push('*{margin:0;padding:0;box-sizing:border-box;}');
+  lines.push("body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;font-size:10px;color:#111;}");
+  lines.push('h1{font-size:14px;text-align:center;margin-bottom:3px;font-weight:700;}');
+  lines.push('.header{display:flex;justify-content:space-between;font-size:10px;margin-bottom:6px;}');
+  lines.push('table{width:100%;border-collapse:collapse;table-layout:fixed;}');
+  lines.push('th,td{border:1px solid #666;text-align:center;vertical-align:middle;overflow:hidden;}');
+  lines.push('.name-col{width:76px;text-align:left;padding:2px 4px;font-weight:700;font-size:10px;}');
+  lines.push('.day-col{width:24px;padding:1px;}');
+  lines.push('.sum-col{width:36px;font-weight:700;font-size:10px;padding:2px;}');
+  lines.push('thead th{background:#1A1F2E;color:#fff;font-weight:700;font-size:9px;padding:3px 1px;}');
+  lines.push('.sym-row td{height:22px;font-size:14px;font-weight:700;padding:1px;}');
+  lines.push('.worked{color:#111;}.off-sym{color:#555;font-size:12px;}.special{color:#c00;}');
+  lines.push('.empty{color:#ccc;font-size:9px;}');
+  lines.push('.ot-row td{height:14px;font-size:9px;color:#c60;padding:1px;border-top:none;}');
+  lines.push('.ot-row .name-col{font-size:8px;color:#888;font-weight:400;border-top:none;}');
+  lines.push('tfoot td{background:#f0f0f0;font-weight:700;font-size:10px;padding:3px 1px;}');
+  lines.push('.sun{background:#fff0f0;}.sat{background:#f0f4ff;}');
+  lines.push('thead th.sun{background:#c0392b;color:#fff;}thead th.sat{background:#2980b9;color:#fff;}');
+  lines.push('@media print{@page{size:A3 landscape;margin:8mm 6mm;}}');
+  lines.push('</style></head><body>');
+  lines.push('<h1>' + yearMonth + '　出　勤　簿　表</h1>');
+  lines.push('<div class="header">');
+  lines.push('<span>現場名：' + (topSite||"　　　　　　") + '&emsp;期間：' + dateFrom + ' 〜 ' + dateTo + '</span>');
+  lines.push('<span>有限会社カネヤマ上山建設&emsp;代表取締役　上山　繁</span>');
+  lines.push('</div>');
+  lines.push('<table><thead><tr><th class="name-col">氏　名</th>');
+  dates.forEach(d => {
+    const dd = new Date(d);
+    const dow = dd.getDay();
+    const cls = dow===0?"sun":dow===6?"sat":"";
+    lines.push('<th class="day-col ' + cls + '">' + dd.getDate() + '<br><span style="font-size:7px">' + DOW[dow] + '</span></th>');
+  });
+  lines.push('<th class="sum-col">合計<br>(日)</th><th class="sum-col">残業<br>合計</th></tr></thead><tbody>');
+
+  workers.forEach(name => {
+    const workedDays = dates.filter(d => { const e=entryMap[d+"_"+name]; return e&&isWorked(e.attendance); }).length;
+    const totalOT = dates.reduce((s,d) => { const e=entryMap[d+"_"+name]; return s+(e?parseFloat(e.overtime_hours)||0:0); }, 0);
+    // 出勤記号行
+    lines.push('<tr class="sym-row">');
+    lines.push('<td class="name-col">' + name + '</td>');
+    dates.forEach(d => {
+      const dd = new Date(d);
+      const dow = dd.getDay();
+      const cls = dow===0?"sun":dow===6?"sat":"";
+      const e = entryMap[d+"_"+name];
+      if(!e){ lines.push('<td class="day-col ' + cls + ' empty">－</td>'); return; }
+      const sym = ATTENDANCE_SYMBOL[e.attendance] || "○";
+      const symCls = e.attendance==="出勤"?"worked":e.attendance==="休み"?"off-sym":"special";
+      lines.push('<td class="day-col ' + cls + '"><span class="' + symCls + '">' + sym + '</span></td>');
+    });
+    lines.push('<td class="sum-col">' + workedDays + '</td>');
+    lines.push('<td class="sum-col">' + totalOT.toFixed(2) + '</td></tr>');
+    // 残業時間行（別行）
+    lines.push('<tr class="ot-row">');
+    lines.push('<td class="name-col">△残業時間</td>');
+    dates.forEach(d => {
+      const dd = new Date(d);
+      const dow = dd.getDay();
+      const cls = dow===0?"sun":dow===6?"sat":"";
+      const e = entryMap[d+"_"+name];
+      const ot = e ? parseFloat(e.overtime_hours)||0 : 0;
+      lines.push('<td class="day-col ' + cls + '">' + (ot>0?ot:"") + '</td>');
+    });
+    lines.push('<td class="sum-col"></td><td class="sum-col"></td></tr>');
   });
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <title>出勤簿</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box;}
-    body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;font-size:9px;color:#111;}
-    h1{font-size:13px;text-align:center;margin-bottom:2px;font-weight:700;}
-    .meta{text-align:center;font-size:9px;color:#444;margin-bottom:6px;}
-    .company{font-size:10px;text-align:right;margin-bottom:6px;}
-    table{width:100%;border-collapse:collapse;font-size:8px;}
-    th,td{border:1px solid #999;padding:2px 3px;text-align:center;white-space:nowrap;}
-    th{background:#1A1F2E;color:#fff;font-weight:600;}
-    .name-col{text-align:left;font-weight:600;min-width:60px;max-width:80px;}
-    .sun{background:#fff0f0;}
-    .sat{background:#f0f0ff;}
-    .worked{color:#111;}
-    .off{color:#888;}
-    .special{color:#c00;font-weight:700;}
-    .summary{font-weight:700;}
-    .ot{color:#c60;font-size:7px;}
-    tfoot td{background:#f5f5f5;font-weight:700;}
-    @media print{@page{size:A3 landscape;margin:8mm 6mm;}body{font-size:8px;}}
-  </style></head><body>
-  <h1>${yearMonth}　出　勤　簿</h1>
-  <div class="meta">現場名：${topSite||"　　　　　　"}&emsp;&emsp;期間：${dateFrom} ～ ${dateTo}</div>
-  <div class="company">有限会社カネヤマ上山建設</div>
-  <table>
-    <thead>
-      <tr>
-        <th class="name-col">氏　名</th>
-        ${dates.map(d => {
-          const dd = new Date(d);
-          const day = dd.getDate();
-          const dow = dd.getDay();
-          const cls = dow===0?"sun":dow===6?"sat":"";
-          const dowStr = ["日","月","火","水","木","金","土"][dow];
-          return `<th class="${cls}">${day}<br><span style="font-size:7px">${dowStr}</span></th>`;
-        }).join("")}
-        <th>出勤<br>日数</th>
-        <th>残業<br>合計</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${workers.map(name => {
-        const workedDays = dates.filter(d => {
-          const e = entryMap[`${d}_${name}`];
-          return e && isWorked(e.attendance);
-        }).length;
-        const totalOT = dates.reduce((s,d) => {
-          const e = entryMap[`${d}_${name}`];
-          return s + (e ? parseFloat(e.overtime_hours)||0 : 0);
-        }, 0);
-        return `<tr>
-          <td class="name-col">${name}</td>
-          ${dates.map(d => {
-            const dd = new Date(d);
-            const dow = dd.getDay();
-            const cls = dow===0?"sun":dow===6?"sat":"";
-            const e = entryMap[`${d}_${name}`];
-            if (!e) return `<td class="${cls} off">－</td>`;
-            const sym = ATTENDANCE_SYMBOL[e.attendance] || "○";
-            const ot = parseFloat(e.overtime_hours)||0;
-            const symCls = e.attendance==="出勤"?"worked":(e.attendance==="休み"?"off":"special");
-            return `<td class="${cls}">
-              <span class="${symCls}">${sym}</span>
-              ${ot>0?`<br><span class="ot">${ot}h</span>`:""}
-            </td>`;
-          }).join("")}
-          <td class="summary">${workedDays}</td>
-          <td class="summary">${totalOT>0?totalOT.toFixed(1)+"h":"－"}</td>
-        </tr>`;
-      }).join("")}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td class="name-col">出勤人数</td>
-        ${dates.map(d => {
-          const cnt = workers.filter(n => {
-            const e = entryMap[`${d}_${n}`];
-            return e && isWorked(e.attendance);
-          }).length;
-          const dd = new Date(d);
-          const dow = dd.getDay();
-          const cls = dow===0?"sun":dow===6?"sat":"";
-          return `<td class="${cls}">${cnt>0?cnt:"－"}</td>`;
-        }).join("")}
-        <td colspan="2"></td>
-      </tr>
-    </tfoot>
-  </table>
-  <div style="margin-top:8px;font-size:8px;color:#666;">
-    記号：○出勤　休=休み　忌=忌引　有=有給休暇　欠=欠勤　△=半日
-  </div>
-  </body></html>`;
+  lines.push('</tbody><tfoot><tr><td class="name-col">出勤人数</td>');
+  dates.forEach(d => {
+    const cnt = workers.filter(n => { const e=entryMap[d+"_"+n]; return e&&isWorked(e.attendance); }).length;
+    const dd = new Date(d);
+    const dow = dd.getDay();
+    const cls = dow===0?"sun":dow===6?"sat":"";
+    lines.push('<td class="day-col ' + cls + '">' + (cnt>0?cnt:"") + '</td>');
+  });
+  lines.push('<td class="sum-col" colspan="2"></td></tr></tfoot></table>');
+  lines.push('<div style="margin-top:6px;font-size:8px;color:#666;">記号：○出勤　休=休み　忌=忌引　有=有給休暇　欠=欠勤</div>');
+  lines.push('</body></html>');
 
-  const w = window.open("","_blank","width=1200,height=700");
-  w.document.write(html);
+  const w = window.open("","_blank","width=1400,height=800");
+  w.document.write(lines.join(""));
   w.document.close();
   w.onload = () => { w.focus(); w.print(); };
 };
+
 
 // ── PDF生成（ブラウザ印刷） ───────────────────────────────
 const printPDF = (entries, machines, dateFrom, dateTo, mode) => {
