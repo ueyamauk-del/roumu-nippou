@@ -30,7 +30,7 @@ const C={
 const bInp={background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"7px 10px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"};
 
 // 月次出勤簿PDF
-const printAttendancePDF = (entries, dateFrom, dateTo) => {
+const printAttendancePDF = (entries, dateFrom, dateTo, setPdfPreview) => {
   const range = entries.filter(e => e.entry_date >= dateFrom && e.entry_date <= dateTo);
   const dates = [];
   const cur = new Date(dateFrom);
@@ -71,7 +71,7 @@ const printAttendancePDF = (entries, dateFrom, dateTo) => {
   lines.push('tfoot td{background:#f0f0f0;font-weight:700;font-size:10px;padding:3px 1px;}');
   lines.push('.sun{background:#ffcccc;}.sat{background:#cce0ff;}');
   lines.push('thead th.sun{background:#e74c3c;color:#fff;font-weight:800;}thead th.sat{background:#2980b9;color:#fff;font-weight:800;}');
-  lines.push('@media print{@page{size:A3 landscape;margin:8mm 6mm;}}');
+  lines.push('@media print{@page{size:A3 landscape;margin:8mm 6mm;}*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}}');
   lines.push('</style></head><body>');
   lines.push('<h1>' + yearMonth + '　出　勤　簿　表</h1>');
   lines.push('<div class="header">');
@@ -150,7 +150,7 @@ const printAttendancePDF = (entries, dateFrom, dateTo) => {
 
 
 // ── PDF生成（ブラウザ印刷） ───────────────────────────────
-const printPDF = (entries, machines, dateFrom, dateTo, mode) => {
+const printPDF = (entries, machines, dateFrom, dateTo, mode, setPdfPreview) => {
   const range = entries.filter(e => e.entry_date >= dateFrom && e.entry_date <= dateTo);
   const byDate = {};
   range.forEach(e => { if(!byDate[e.entry_date]) byDate[e.entry_date]=[]; byDate[e.entry_date].push(e); });
@@ -177,7 +177,7 @@ const printPDF = (entries, machines, dateFrom, dateTo, mode) => {
     .snum{font-size:20px;font-weight:800;line-height:1;}
     .slabel{font-size:9px;color:#666;margin-top:2px;}
     .machines{font-size:9px;color:#3b5bdb;}
-    @media print{@page{size:A4;margin:15mm 12mm;}}
+    @media print{@page{size:A4;margin:15mm 12mm;}*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}}
   </style></head><body>`;
 
   if(mode==="summary") {
@@ -304,6 +304,7 @@ export default function App() {
   const [deleteMTarget, setDeleteMTarget] = useState(null);
   const [machinePickerFor, setMachinePickerFor] = useState(null);
   const [inheritConfirm, setInheritConfirm] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState(null);
 
   // 前日の日付
   const prevDate = (dateStr) => {
@@ -549,7 +550,7 @@ export default function App() {
                   style={{padding:"6px 12px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.accent,color:"#1A1F2E"}}>＋ 作業員追加</button>
               </>}
               {(view==="report") && (
-                <button onClick={()=>printPDF(entries,machines,filterDate,filterDate,"daily")}
+                <button onClick={()=>printPDF(entries,machines,filterDate,filterDate,"daily",setPdfPreview)}
                   style={{padding:"6px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.purple,color:"#fff",display:"flex",alignItems:"center",gap:4}}>
                   🖨 PDF出力
                 </button>
@@ -731,15 +732,15 @@ export default function App() {
               <input type="date" value={rangeTo} onChange={e=>setRangeTo(e.target.value)}
                 style={{background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"6px 10px",fontSize:13,outline:"none"}}/>
               <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button onClick={()=>printPDF(entries,machines,rangeFrom,rangeTo,"daily")}
+                <button onClick={()=>printPDF(entries,machines,rangeFrom,rangeTo,"daily",setPdfPreview)}
                   style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${C.purple}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.purple}}>
                   🖨 日別PDF
                 </button>
-                <button onClick={()=>printPDF(entries,machines,rangeFrom,rangeTo,"summary")}
+                <button onClick={()=>printPDF(entries,machines,rangeFrom,rangeTo,"summary",setPdfPreview)}
                   style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.purple,color:"#fff"}}>
                   🖨 集計PDF
                 </button>
-                <button onClick={()=>printAttendancePDF(entries,rangeFrom,rangeTo)}
+                <button onClick={()=>printAttendancePDF(entries,rangeFrom,rangeTo,setPdfPreview)}
                   style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.accent,color:"#1A1F2E"}}>
                   📋 出勤簿PDF
                 </button>
@@ -1013,6 +1014,36 @@ export default function App() {
                 style={{flex:2,padding:"8px 0",borderRadius:7,border:"none",background:C.green,color:"#fff",cursor:"pointer",fontWeight:700,fontSize:13}}>引き継ぐ</button>
             </div>
           </div>
+        </div>
+      )}
+      {/* ── PDFプレビューモーダル ── */}
+      {pdfPreview && (
+        <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:300,display:"flex",flexDirection:"column"}}>
+          <div style={{background:C.surface,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+            <div style={{color:C.accent,fontWeight:700,fontSize:14}}>📋 プレビュー</div>
+            <div style={{display:"flex",gap:8}}>
+              <button
+                onClick={()=>{
+                  const iframe = document.getElementById("pdf-iframe");
+                  if(iframe) iframe.contentWindow.print();
+                }}
+                style={{padding:"8px 16px",borderRadius:7,border:"none",background:C.accent,color:"#1A1F2E",cursor:"pointer",fontWeight:700,fontSize:13}}>
+                🖨 印刷・PDF保存
+              </button>
+              <button onClick={()=>setPdfPreview(null)}
+                style={{padding:"8px 14px",borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,cursor:"pointer",fontWeight:600,fontSize:13}}>
+                ✕ 閉じる
+              </button>
+            </div>
+          </div>
+          <div style={{color:C.muted,fontSize:11,textAlign:"center",padding:"6px",background:C.surface,flexShrink:0}}>
+            スマホの場合：「🖨 印刷・PDF保存」→ 共有 → プリント でPDF保存できます
+          </div>
+          <iframe
+            id="pdf-iframe"
+            srcDoc={pdfPreview}
+            style={{flex:1,border:"none",background:"#fff"}}
+          />
         </div>
       )}
     </div>
