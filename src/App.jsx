@@ -1018,31 +1018,35 @@ export default function App() {
       )}
       {/* ── PDFプレビューモーダル ── */}
       {pdfPreview && (
-        <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:300,display:"flex",flexDirection:"column"}}>
-          <div style={{background:C.surface,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-            <div style={{color:C.accent,fontWeight:700,fontSize:14}}>📋 プレビュー</div>
-            <div style={{display:"flex",gap:8}}>
+        <div style={{position:"fixed",inset:0,background:"#fff",zIndex:300,display:"flex",flexDirection:"column"}}>
+          <div style={{background:"#1A1F2E",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,gap:8}}>
+            <div style={{color:"#E8A838",fontWeight:700,fontSize:14}}>📋 プレビュー</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <button
                 onClick={()=>{
-                  const iframe = document.getElementById("pdf-iframe");
-                  if(iframe) iframe.contentWindow.print();
+                  const el = document.getElementById("pdf-print-area");
+                  if(!el) return;
+                  const w = window.open("","_blank");
+                  w.document.write("<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>" + el.innerHTML + "</body></html>");
+                  w.document.close();
+                  setTimeout(()=>{ w.focus(); w.print(); }, 500);
                 }}
-                style={{padding:"8px 16px",borderRadius:7,border:"none",background:C.accent,color:"#1A1F2E",cursor:"pointer",fontWeight:700,fontSize:13}}>
+                style={{padding:"8px 14px",borderRadius:7,border:"none",background:"#E8A838",color:"#1A1F2E",cursor:"pointer",fontWeight:700,fontSize:12}}>
                 🖨 印刷・PDF保存
               </button>
               <button onClick={()=>setPdfPreview(null)}
-                style={{padding:"8px 14px",borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,cursor:"pointer",fontWeight:600,fontSize:13}}>
+                style={{padding:"8px 12px",borderRadius:7,border:"1px solid #3A4460",background:"transparent",color:"#8A94AE",cursor:"pointer",fontWeight:600,fontSize:12}}>
                 ✕ 閉じる
               </button>
             </div>
           </div>
-          <div style={{color:C.muted,fontSize:11,textAlign:"center",padding:"6px",background:C.surface,flexShrink:0}}>
-            スマホの場合：「🖨 印刷・PDF保存」→ 共有 → プリント でPDF保存できます
+          <div style={{fontSize:11,textAlign:"center",padding:"5px",background:"#232A3B",color:"#8A94AE",flexShrink:0}}>
+            スマホ：「🖨 印刷・PDF保存」→ 共有ボタン → プリント → PDF保存
           </div>
-          <iframe
-            id="pdf-iframe"
-            srcDoc={pdfPreview}
-            style={{flex:1,border:"none",background:"#fff"}}
+          <div
+            id="pdf-print-area"
+            style={{flex:1,overflow:"auto",background:"#fff",padding:"12px"}}
+            dangerouslySetInnerHTML={{__html: pdfPreview}}
           />
         </div>
       )}
