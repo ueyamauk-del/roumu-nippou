@@ -131,21 +131,7 @@ const printAttendancePDF = (entries, dateFrom, dateTo, setPdfPreview) => {
   lines.push('<div style="margin-top:6px;font-size:8px;color:#666;">記号：○出勤　休=休み　忌=忌引　有=有給休暇　欠=欠勤</div>');
   lines.push('</body></html>');
 
-  const html = lines.join("");
-  const encoded = encodeURIComponent(html);
-  const dataUri = "data:text/html;charset=utf-8," + encoded;
-  const w = window.open(dataUri, "_blank");
-  if (!w) {
-    // ポップアップブロックされた場合はリンクを作成
-    const a = document.createElement("a");
-    a.href = dataUri;
-    a.target = "_blank";
-    a.textContent = "出勤簿を開く";
-    a.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#E8A838;color:#111;padding:16px 24px;border-radius:8px;font-size:16px;text-decoration:none;font-weight:700;";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => document.body.removeChild(a), 5000);
-  }
+  setPdfPreview(lines.join(""));
 };
 
 
@@ -266,19 +252,7 @@ const printPDF = (entries, machines, dateFrom, dateTo, mode, setPdfPreview) => {
   }
 
   html+=`</body></html>`;
-  const encoded = encodeURIComponent(html);
-  const dataUri = "data:text/html;charset=utf-8," + encoded;
-  const w = window.open(dataUri, "_blank");
-  if (!w) {
-    const a = document.createElement("a");
-    a.href = dataUri;
-    a.target = "_blank";
-    a.textContent = "PDFを開く";
-    a.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#A78BFA;color:#fff;padding:16px 24px;border-radius:8px;font-size:16px;text-decoration:none;font-weight:700;";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => document.body.removeChild(a), 5000);
-  }
+  setPdfPreview(html);
 };
 
 // ── メインアプリ ──────────────────────────────────────────
