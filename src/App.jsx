@@ -135,6 +135,146 @@ const printAttendancePDF = (entries, dateFrom, dateTo, setPdfPreview) => {
 };
 
 
+// ── 現場別出勤簿PDF ──────────────────────────────────────
+const printSitePDF = (entries, machines, dateFrom, dateTo, setPdfPreview) => {
+  const range = entries.filter(e => e.entry_date >= dateFrom && e.entry_date <= dateTo);
+
+  // 日付一覧
+  const dates = [];
+  const cur = new Date(dateFrom);
+  const end = new Date(dateTo);
+  while(cur <= end){ dates.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate()+1); }
+
+  // 現場一覧（登場順・未記入除く）
+  const sites = [...new Set(
+    range.filter(e => e.attendance === "出勤" && e.site && e.site.trim())
+         .map(e => e.site.trim())
+  )].sort();
+
+  // 年月
+  const fromD = new Date(dateFrom);
+  const toD = new Date(dateTo);
+  const nengo = fromD.getFullYear() - 2018;
+  const yearMonth = (fromD.getFullYear()===toD.getFullYear() && fromD.getMonth()===toD.getMonth())
+    ? ("令和" + nengo + "年 " + (fromD.getMonth()+1) + "月分")
+    : (fromD.getFullYear() + "." + (fromD.getMonth()+1) + " 〜 " + toD.getFullYear() + "." + (toD.getMonth()+1));
+  const DOW = ["日","月","火","水","木","金","土"];
+
+  // 機械ごとの使用日マップ
+  const machineUseDates = {};
+  range.forEach(e => {
+    (e.machine_ids||[]).forEach(mid => {
+      if(!machineUseDates[mid]) machineUseDates[mid] = new Set();
+      machineUseDates[mid].add(e.entry_date);
+    });
+  });
+
+  const L = [];
+  L.push('<!DOCTYPE html><html><head><meta charset="utf-8"><title>現場別出勤簿</title>');
+  L.push('<style>');
+  L.push('*{margin:0;padding:0;box-sizing:border-box;}');
+  L.push("body{font-family:'Noto Sans JP','Hiragino Sans',sans-serif;font-size:10px;color:#111;}");
+  L.push('h1{font-size:14px;text-align:center;margin-bottom:3px;font-weight:700;}');
+  L.push('.header{display:flex;justify-content:space-between;font-size:10px;margin-bottom:6px;}');
+  L.push('table{width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:16px;}');
+  L.push('th,td{border:1px solid #666;text-align:center;vertical-align:middle;overflow:hidden;}');
+  L.push('.site-col{width:80px;text-align:left;padding:2px 4px;font-weight:700;font-size:10px;}');
+  L.push('.day-col{width:24px;padding:1px;font-size:9px;}');
+  L.push('.sum-col{width:36px;font-weight:700;font-size:10px;padding:2px;}');
+  L.push('thead th{background:#1A1F2E;color:#fff;font-weight:700;font-size:9px;padding:3px 1px;}');
+  L.push('.cnt-row td{height:22px;font-size:12px;font-weight:700;padding:1px;}');
+  L.push('.names-row td{height:14px;font-size:8px;color:#555;padding:1px;border-top:none;}');
+  L.push('.names-row .site-col{border-top:none;color:#888;font-weight:400;font-size:8px;}');
+  L.push('tfoot td{background:#f0f0f0;font-weight:700;font-size:10px;padding:3px 1px;}');
+  L.push('.sun{background:#ffcccc;}.sat{background:#cce0ff;}');
+  L.push('thead th.sun{background:#e74c3c;color:#fff;}thead th.sat{background:#2980b9;color:#fff;}');
+  L.push('.section{font-size:12px;font-weight:700;margin:8px 0 4px;border-left:3px solid #E8A838;padding-left:6px;}');
+  L.push('.machine-table{width:100%;border-collapse:collapse;font-size:9px;}');
+  L.push('.machine-table th{background:#333;color:#fff;padding:3px 6px;text-align:left;}');
+  L.push('.machine-table td{padding:3px 6px;border-bottom:1px solid #ddd;}');
+  L.push('@media print{@page{size:A3 landscape;margin:8mm 6mm;}*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}}');
+  L.push('</style></head><body>');
+  L.push('<h1>' + yearMonth + '　現場別出勤簿</h1>');
+  L.push('<div class="header">');
+  L.push('<span>期間：' + dateFrom + ' 〜 ' + dateTo + '</span>');
+  L.push('<span>有限会社カネヤマ上山建設&emsp;代表取締役　上山　繁</span>');
+  L.push('</div>');
+
+  // 現場×日付テーブル
+  L.push('<table><thead><tr><th class="site-col">現　場</th>');
+  dates.forEach(d => {
+    const dd = new Date(d);
+    const dow = dd.getDay();
+    const cls = dow===0?"sun":dow===6?"sat":"";
+    L.push('<th class="day-col ' + cls + '">' + dd.getDate() + '<br><span style="font-size:7px">' + DOW[dow] + '</span></th>');
+  });
+  L.push('<th class="sum-col">出勤<br>人日</th></tr></thead><tbody>');
+
+  sites.forEach(site => {
+    const siteEntries = range.filter(e => (e.site||"").trim() === site && e.attendance === "出勤");
+    const totalPersonDays = siteEntries.length;
+
+    // 出勤人数行
+    L.push('<tr class="cnt-row"><td class="site-col">' + site + '</td>');
+    dates.forEach(d => {
+      const dd = new Date(d);
+      const dow = dd.getDay();
+      const cls = dow===0?"sun":dow===6?"sat":"";
+      const dayEntries = siteEntries.filter(e => e.entry_date === d);
+      const cnt = dayEntries.length;
+      L.push('<td class="day-col ' + cls + '">' + (cnt > 0 ? cnt : "") + '</td>');
+    });
+    L.push('<td class="sum-col">' + totalPersonDays + '</td></tr>');
+
+    // 作業員名行（省略表示）
+    L.push('<tr class="names-row"><td class="site-col">↳作業員</td>');
+    dates.forEach(d => {
+      const dd = new Date(d);
+      const dow = dd.getDay();
+      const cls = dow===0?"sun":dow===6?"sat":"";
+      const names = siteEntries.filter(e => e.entry_date === d).map(e => e.worker_name.split(" ")[0]);
+      L.push('<td class="day-col ' + cls + '" style="font-size:7px;line-height:1.2;">' + names.join("<br>") + '</td>');
+    });
+    L.push('<td class="sum-col"></td></tr>');
+  });
+
+  // 合計行
+  L.push('</tbody><tfoot><tr><td class="site-col">合計（人数）</td>');
+  dates.forEach(d => {
+    const dd = new Date(d);
+    const dow = dd.getDay();
+    const cls = dow===0?"sun":dow===6?"sat":"";
+    const cnt = range.filter(e => e.entry_date===d && e.attendance==="出勤" && (e.site||"").trim()).length;
+    L.push('<td class="day-col ' + cls + '">' + (cnt>0?cnt:"") + '</td>');
+  });
+  const total = range.filter(e => e.attendance==="出勤" && (e.site||"").trim()).length;
+  L.push('<td class="sum-col">' + total + '</td></tr></tfoot></table>');
+
+  // 稼働機械一覧
+  L.push('<div class="section">稼働機械一覧</div>');
+  const usedMachineIds = Object.keys(machineUseDates);
+  if(usedMachineIds.length === 0) {
+    L.push('<div style="color:#888;font-size:10px;">この期間の稼働機械記録なし</div>');
+  } else {
+    L.push('<table class="machine-table"><thead><tr><th style="width:160px;">機械名</th><th>稼働日</th></tr></thead><tbody>');
+    usedMachineIds.forEach(mid => {
+      const machine = machines.find(m => m.id === mid);
+      if(!machine) return;
+      const usedDates = [...machineUseDates[mid]].sort();
+      const dateLabels = usedDates.map(d => {
+        const dd = new Date(d);
+        return (dd.getMonth()+1) + "/" + dd.getDate() + "(" + DOW[dd.getDay()] + ")";
+      }).join("　");
+      L.push('<tr><td>' + machine.name + '</td><td>' + dateLabels + '</td></tr>');
+    });
+    L.push('</tbody></table>');
+  }
+
+  L.push('</body></html>');
+  setPdfPreview(L.join(""));
+};
+
+
 // ── PDF生成（ブラウザ印刷） ───────────────────────────────
 const printPDF = (entries, machines, dateFrom, dateTo, mode, setPdfPreview) => {
   const range = entries.filter(e => e.entry_date >= dateFrom && e.entry_date <= dateTo);
@@ -716,7 +856,11 @@ export default function App() {
                 </button>
                 <button onClick={()=>printAttendancePDF(entries,rangeFrom,rangeTo,setPdfPreview)}
                   style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.accent,color:"#1A1F2E"}}>
-                  📋 出勤簿PDF
+                  📋 作業員別出勤簿
+                </button>
+                <button onClick={()=>printSitePDF(entries,machines,rangeFrom,rangeTo,setPdfPreview)}
+                  style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.blue,color:"#fff"}}>
+                  🏗 現場別出勤簿
                 </button>
               </div>
             </div>
