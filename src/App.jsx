@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import * as XLSX from "xlsx";
+window.XLSX = XLSX;
 import { supabase } from "./supabaseClient";
 
 // ── 定数 ────────────────────────────────────────────────
@@ -134,6 +136,161 @@ const printAttendancePDF = (entries, dateFrom, dateTo, setPdfPreview) => {
   setPdfPreview(lines.join(""));
 };
 
+
+// ── 作業員別出勤簿 Excel出力 ──────────────────────────────
+const exportWorkerExcel = (entries, dateFrom, dateTo) => {
+  const XLSX = window.XLSX;
+  if(!XLSX){ alert("Excelライブラリが読み込まれていません"); return; }
+  const range = entries.filter(e => e.entry_date >= dateFrom && e.entry_date <= dateTo);
+  const dates = [];
+  const cur = new Date(dateFrom); const end = new Date(dateTo);
+  while(cur<=end){ dates.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate()+1); }
+  const workers = [...new Set(range.map(e => e.worker_name))];
+  const DOW = ["日","月","火","水","木","金","土"];
+  const fromD = new Date(dateFrom);
+  const nengo = fromD.getFullYear() - 2018;
+  const yearMonth = "令和" + nengo + "年 " + (fromD.getMonth()+1) + "月分";
+
+  const wb = XLSX.utils.book_new();
+  const wsData = [];
+
+  // タイトル行
+  wsData.push(["", yearMonth + "　出勤簿", "", ...dates.map(()=>""), "合計(日)", "残業合計"]);
+  wsData.push(["", "有限会社カネヤマ上山建設", "", ...dates.map(()=>""), "", ""]);
+
+  // ヘッダー行（日付）
+  const headerRow = ["氏　名", ""];
+  dates.forEach(d => {
+    const dd = new Date(d);
+    headerRow.push(dd.getDate() + "(" + DOW[dd.getDay()] + ")");
+  });
+  headerRow.push("出勤日数", "残業合計");
+  wsData.push(headerRow);
+
+  // 作業員ごとのデータ
+  workers.forEach(name => {
+    const symRow = [name, "出勤状況"];
+    const otRow = ["", "残業時間"];
+    let workedDays = 0;
+    let totalOT = 0;
+    dates.forEach(d => {
+      const e = range.find(en => en.entry_date===d && en.worker_name===name);
+      if(!e){ symRow.push("－"); otRow.push(""); return; }
+      symRow.push(ATTENDANCE_SYMBOL[e.attendance]||"○");
+      const ot = parseFloat(e.overtime_hours)||0;
+      otRow.push(ot > 0 ? ot : "");
+      if(isWorked(e.attendance)) workedDays++;
+      totalOT += ot;
+    });
+    symRow.push(workedDays, totalOT > 0 ? totalOT : "");
+    otRow.push("", "");
+    wsData.push(symRow);
+    wsData.push(otRow);
+  });
+
+  // 出勤人数行
+  const cntRow = ["出勤人数", ""];
+  dates.forEach(d => {
+    const cnt = range.filter(e => e.entry_date===d && isWorked(e.attendance)).length;
+    cntRow.push(cnt > 0 ? cnt : "");
+  });
+  cntRow.push("", "");
+  wsData.push(cntRow);
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [{wch:14},{wch:10},...dates.map(()=>({wch:6})),{wch:8},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws, "作業員別出勤簿");
+  XLSX.writeFile(wb, "作業員別出勤簿_" + dateFrom + "_" + dateTo + ".xlsx");
+};
+
+// ── 現場別出勤簿 Excel出力 ────────────────────────────────
+const exportSiteExcel = (entries, machines, dateFrom, dateTo) => {
+  const XLSX = window.XLSX;
+  if(!XLSX){ alert("Excelライブラリが読み込まれていません"); return; }
+  const range = entries.filter(e => e.entry_date >= dateFrom && e.entry_date <= dateTo);
+  const dates = [];
+  const cur = new Date(dateFrom); const end = new Date(dateTo);
+  while(cur<=end){ dates.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate()+1); }
+  const sites = [...new Set(
+    range.filter(e => e.attendance==="出勤" && e.site && e.site.trim()).map(e => e.site.trim())
+  )].sort();
+  const DOW = ["日","月","火","水","木","金","土"];
+  const fromD = new Date(dateFrom);
+  const nengo = fromD.getFullYear() - 2018;
+  const yearMonth = "令和" + nengo + "年 " + (fromD.getMonth()+1) + "月分";
+
+  // 機械使用日マップ
+  const machineUseDates = {};
+  range.forEach(e => {
+    (e.machine_ids||[]).forEach(mid => {
+      if(!machineUseDates[mid]) machineUseDates[mid] = new Set();
+      machineUseDates[mid].add(e.entry_date);
+    });
+  });
+
+  const wb = XLSX.utils.book_new();
+  const wsData = [];
+
+  wsData.push(["", yearMonth + "　現場別出勤簿", ...dates.map(()=>""), "人日合計"]);
+  wsData.push(["", "有限会社カネヤマ上山建設", ...dates.map(()=>""), ""]);
+
+  const headerRow = ["現　場", ""];
+  dates.forEach(d => {
+    const dd = new Date(d);
+    headerRow.push(dd.getDate() + "(" + DOW[dd.getDay()] + ")");
+  });
+  headerRow.push("人日合計");
+  wsData.push(headerRow);
+
+  sites.forEach(site => {
+    const siteEntries = range.filter(e => (e.site||"").trim()===site && e.attendance==="出勤");
+    const cntRow = [site, "出勤人数"];
+    const nameRow = ["", "作業員"];
+    let total = 0;
+    dates.forEach(d => {
+      const dayEntries = siteEntries.filter(e => e.entry_date===d);
+      cntRow.push(dayEntries.length > 0 ? dayEntries.length : "");
+      nameRow.push(dayEntries.map(e => e.worker_name.split(" ")[0]).join("・") || "");
+      total += dayEntries.length;
+    });
+    cntRow.push(total);
+    nameRow.push("");
+    wsData.push(cntRow);
+    wsData.push(nameRow);
+  });
+
+  // 合計行
+  const totalRow = ["合　計", ""];
+  dates.forEach(d => {
+    const cnt = range.filter(e => e.entry_date===d && e.attendance==="出勤" && (e.site||"").trim()).length;
+    totalRow.push(cnt > 0 ? cnt : "");
+  });
+  totalRow.push(range.filter(e => e.attendance==="出勤" && (e.site||"").trim()).length);
+  wsData.push(totalRow);
+
+  // 稼働機械シート
+  const machineData = [["機械名", "稼働日一覧", "稼働日数"]];
+  Object.keys(machineUseDates).forEach(mid => {
+    const machine = machines.find(m => m.id===mid);
+    if(!machine) return;
+    const usedDates = [...machineUseDates[mid]].sort();
+    const dateLabels = usedDates.map(d => {
+      const dd = new Date(d);
+      return (dd.getMonth()+1) + "/" + dd.getDate() + "(" + DOW[dd.getDay()] + ")";
+    }).join("  ");
+    machineData.push([machine.name, dateLabels, usedDates.length]);
+  });
+
+  const ws1 = XLSX.utils.aoa_to_sheet(wsData);
+  ws1['!cols'] = [{wch:16},{wch:10},...dates.map(()=>({wch:6})),{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws1, "現場別出勤簿");
+
+  const ws2 = XLSX.utils.aoa_to_sheet(machineData);
+  ws2['!cols'] = [{wch:20},{wch:60},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws2, "稼働機械");
+
+  XLSX.writeFile(wb, "現場別出勤簿_" + dateFrom + "_" + dateTo + ".xlsx");
+};
 
 // ── 現場別出勤簿PDF ──────────────────────────────────────
 const printSitePDF = (entries, machines, dateFrom, dateTo, setPdfPreview) => {
@@ -858,9 +1015,17 @@ export default function App() {
                   style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.accent,color:"#1A1F2E"}}>
                   📋 作業員別出勤簿
                 </button>
+                <button onClick={()=>exportWorkerExcel(entries,rangeFrom,rangeTo)}
+                  style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${C.accent}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.accent}}>
+                  📊 作業員別Excel
+                </button>
                 <button onClick={()=>printSitePDF(entries,machines,rangeFrom,rangeTo,setPdfPreview)}
                   style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.blue,color:"#fff"}}>
                   🏗 現場別出勤簿
+                </button>
+                <button onClick={()=>exportSiteExcel(entries,machines,rangeFrom,rangeTo)}
+                  style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${C.blue}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.blue}}>
+                  📊 現場別Excel
                 </button>
               </div>
             </div>
