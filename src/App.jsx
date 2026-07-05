@@ -995,37 +995,44 @@ export default function App() {
         {/* ── 複数日集計 ── */}
         {view==="summary" && (
           <>
-            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:16,marginBottom:18,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{color:C.muted,fontSize:13}}>集計期間</span>
-              <input type="date" value={rangeFrom} onChange={e=>setRangeFrom(e.target.value)}
-                style={{background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"6px 10px",fontSize:13,outline:"none"}}/>
-              <span style={{color:C.muted}}>〜</span>
-              <input type="date" value={rangeTo} onChange={e=>setRangeTo(e.target.value)}
-                style={{background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"6px 10px",fontSize:13,outline:"none"}}/>
-              <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
+            {/* 期間 + ボタン群 */}
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:14,marginBottom:18}}>
+              <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
+                <span style={{color:C.muted,fontSize:13}}>集計期間</span>
+                <input type="date" value={rangeFrom} onChange={e=>setRangeFrom(e.target.value)}
+                  style={{background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"6px 10px",fontSize:13,outline:"none"}}/>
+                <span style={{color:C.muted}}>〜</span>
+                <input type="date" value={rangeTo} onChange={e=>setRangeTo(e.target.value)}
+                  style={{background:C.inputBg,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:"6px 10px",fontSize:13,outline:"none"}}/>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+                <span style={{color:C.muted,fontSize:11,alignSelf:"center",width:40}}>PDF</span>
                 <button onClick={()=>printPDF(entries,machines,rangeFrom,rangeTo,"daily",setPdfPreview)}
-                  style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${C.purple}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.purple}}>
-                  🖨 日別PDF
+                  style={{padding:"7px 12px",borderRadius:7,border:`1px solid ${C.purple}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.purple}}>
+                  🖨 日別
                 </button>
                 <button onClick={()=>printPDF(entries,machines,rangeFrom,rangeTo,"summary",setPdfPreview)}
-                  style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.purple,color:"#fff"}}>
-                  🖨 集計PDF
+                  style={{padding:"7px 12px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.purple,color:"#fff"}}>
+                  🖨 集計
                 </button>
                 <button onClick={()=>printAttendancePDF(entries,rangeFrom,rangeTo,setPdfPreview)}
-                  style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.accent,color:"#1A1F2E"}}>
+                  style={{padding:"7px 12px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.accent,color:"#1A1F2E"}}>
                   📋 作業員別出勤簿
                 </button>
-                <button onClick={()=>exportWorkerExcel(entries,rangeFrom,rangeTo)}
-                  style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${C.accent}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.accent}}>
-                  📊 作業員別Excel
-                </button>
                 <button onClick={()=>printSitePDF(entries,machines,rangeFrom,rangeTo,setPdfPreview)}
-                  style={{padding:"7px 14px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.blue,color:"#fff"}}>
+                  style={{padding:"7px 12px",borderRadius:7,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,background:C.blue,color:"#fff"}}>
                   🏗 現場別出勤簿
                 </button>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <span style={{color:C.muted,fontSize:11,alignSelf:"center",width:40}}>Excel</span>
+                <button onClick={()=>exportWorkerExcel(entries,rangeFrom,rangeTo)}
+                  style={{padding:"7px 12px",borderRadius:7,border:`1px solid ${C.accent}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.accent}}>
+                  📊 作業員別
+                </button>
                 <button onClick={()=>exportSiteExcel(entries,machines,rangeFrom,rangeTo)}
-                  style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${C.blue}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.blue}}>
-                  📊 現場別Excel
+                  style={{padding:"7px 12px",borderRadius:7,border:`1px solid ${C.blue}`,cursor:"pointer",fontWeight:600,fontSize:12,background:"transparent",color:C.blue}}>
+                  📊 現場別
                 </button>
               </div>
             </div>
