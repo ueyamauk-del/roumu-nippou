@@ -731,6 +731,11 @@ export default function App() {
   const totalOT = filtered.reduce((s,e)=>s+(parseFloat(e.overtime_hours)||0),0);
   const usedMids = [...new Set(filtered.flatMap(e => e.machine_ids||[]))];
 
+  // 過去に入力された現場名の候補リスト
+  const siteSuggestions = [...new Set(
+    entries.map(e => (e.site||"").trim()).filter(Boolean)
+  )].sort();
+
   const summaryData = useMemo(()=>{
     const range = entries.filter(e => e.entry_date >= rangeFrom && e.entry_date <= rangeTo);
     const dates = [...new Set(range.map(e => e.entry_date))].sort();
@@ -877,8 +882,13 @@ export default function App() {
                     </div>
 
                     {!isOff && <>
-                    <input type="text" placeholder="現場名を入力" value={e.site||""} onChange={ev=>update(e.id,"site",ev.target.value)}
+                    <input type="text" placeholder="現場名を入力" value={e.site||""}
+                      onChange={ev=>update(e.id,"site",ev.target.value)}
+                      list={"site-list-"+e.id}
                       style={{...bInp,marginBottom:7}}/>
+                    <datalist id={"site-list-"+e.id}>
+                      {siteSuggestions.map(s=><option key={s} value={s}/>)}
+                    </datalist>
 
                     {/* 残業時間 */}
                     <div style={{display:"flex",gap:8,marginBottom:7,alignItems:"center"}}>
