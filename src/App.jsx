@@ -566,6 +566,7 @@ export default function App() {
 
   const [workerModal, setWorkerModal] = useState(false);
   const [newWorkerName, setNewWorkerName] = useState("");
+  const [selectedWorkers, setSelectedWorkers] = useState([]); // チェックした作業員
   const [workerNameErr, setWorkerNameErr] = useState("");
   const [machineModal, setMachineModal] = useState(false);
   const [newMachineName, setNewMachineName] = useState("");
@@ -668,21 +669,30 @@ export default function App() {
     if (error) setErrorMsg("保存エラー: " + error.message);
   };
 
+  // 過去に登場した作業員の全リスト
+  const allWorkers = [...new Set(entries.map(e => e.worker_name))].sort();
+
   const addWorker = async () => {
-    const name = newWorkerName.trim();
-    if (!name) { setWorkerNameErr("氏名を入力してください"); return; }
-    if (entries.some(e => e.worker_name === name && e.entry_date === filterDate)) {
-      setWorkerNameErr("同じ名前が既にいます"); return;
-    }
-    const newEntry = {
+    // 選択済み + 新規入力をまとめる
+    const names = [...selectedWorkers];
+    const newName = newWorkerName.trim();
+    if (newName && !names.includes(newName)) names.push(newName);
+    if (names.length === 0) { setWorkerNameErr("作業員を選択または入力してください"); return; }
+
+    const toAdd = names.filter(name =>
+      !entries.some(e => e.worker_name === name && e.entry_date === filterDate)
+    );
+    if (toAdd.length === 0) { setWorkerNameErr("選択した作業員はすでに追加されています"); return; }
+
+    const newEntries = toAdd.map(name => ({
       worker_name: name, entry_date: filterDate, site: "",
       attendance: "出勤", overtime_hours: 0,
       work_type: "", materials: "", note: "", machine_ids: [], status: "未記入",
-    };
-    const { data, error } = await supabase.from("entries").insert(newEntry).select().single();
+    }));
+    const { data, error } = await supabase.from("entries").insert(newEntries).select();
     if (error) { setErrorMsg("追加エラー: " + error.message); return; }
-    setEntries(prev => [data, ...prev]);
-    setNewWorkerName(""); setWorkerNameErr(""); setWorkerModal(false);
+    setEntries(prev => [...data, ...prev]);
+    setNewWorkerName(""); setWorkerNameErr(""); setSelectedWorkers([]); setWorkerModal(false);
   };
 
   const addMachine = async () => {
@@ -882,13 +892,35 @@ export default function App() {
                     </div>
 
                     {!isOff && <>
-                    <input type="text" placeholder="現場名を入力" value={e.site||""}
-                      onChange={ev=>update(e.id,"site",ev.target.value)}
-                      list={"site-list-"+e.id}
-                      style={{...bInp,marginBottom:7}}/>
-                    <datalist id={"site-list-"+e.id}>
-                      {siteSuggestions.map(s=><option key={s} value={s}/>)}
-                    </datalist>
+                    {/* 現場名：履歴選択 or 新規入力 */}
+                    {siteSuggestions.length > 0 && (e.site||"") === "" ? (
+                      <div style={{marginBottom:7}}>
+                        <select
+                          onChange={ev=>{
+                            if(ev.target.value==="__new__") update(e.id,"site","__typing__");
+                            else update(e.id,"site",ev.target.value);
+                          }}
+                          style={{...bInp}}>
+                          <option value="">現場名を選択...</option>
+                          {siteSuggestions.map(s=><option key={s} value={s}>{s}</option>)}
+                          <option value="__new__">＋ 新規入力</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <div style={{marginBottom:7,display:"flex",gap:6,alignItems:"center"}}>
+                        <input type="text" placeholder="現場名を入力"
+                          value={e.site==="__typing__"?"":e.site||""}
+                          onChange={ev=>update(e.id,"site",ev.target.value)}
+                          autoFocus={e.site==="__typing__"}
+                          style={{...bInp,flex:1,marginBottom:0}}/>
+                        {siteSuggestions.length > 0 && (
+                          <button onClick={()=>update(e.id,"site","")}
+                            style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,cursor:"pointer",fontSize:11,whiteSpace:"nowrap"}}>
+                            履歴
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {/* 残業時間 */}
                     <div style={{display:"flex",gap:8,marginBottom:7,alignItems:"center"}}>
@@ -1211,22 +1243,58 @@ export default function App() {
 
       {/* ── 作業員追加モーダル ── */}
       {workerModal&&(
-        <div style={{position:"fixed",inset:0,background:"#00000088",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}
-          onClick={e=>{if(e.target===e.currentTarget){setWorkerModal(false);setNewWorkerName("");setWorkerNameErr("");}}}>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:26,width:330,boxShadow:"0 20px 60px #0008"}}>
+        <div style={{position:"fixed",inset:0,background:"#00000088",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}
+          onClick={e=>{if(e.target===e.currentTarget){setWorkerModal(false);setNewWorkerName("");setWorkerNameErr("");setSelectedWorkers([]);}}}>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:22,width:"100%",maxWidth:380,boxShadow:"0 20px 60px #0008",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
             <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>作業員を追加</div>
-            <div style={{color:C.muted,fontSize:12,marginBottom:18}}>この日の記録に追加されます</div>
-            <label style={{fontSize:12,color:C.muted,display:"block",marginBottom:4}}>氏名</label>
-            <input autoFocus type="text" placeholder="例：山田 太郎" value={newWorkerName}
+            <div style={{color:C.muted,fontSize:12,marginBottom:12}}>複数選択できます</div>
+
+            {/* 過去の作業員リスト */}
+            {allWorkers.length > 0 && <>
+              <div style={{fontSize:12,color:C.muted,marginBottom:6}}>過去の作業員から選択</div>
+              <div style={{overflowY:"auto",maxHeight:200,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:12,background:C.inputBg}}>
+                {allWorkers
+                  .filter(name => !entries.some(e => e.worker_name===name && e.entry_date===filterDate))
+                  .map(name => {
+                    const checked = selectedWorkers.includes(name);
+                    return (
+                      <div key={name} onClick={()=>setSelectedWorkers(prev=>checked?prev.filter(n=>n!==name):[...prev,name])}
+                        style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",borderBottom:`1px solid ${C.border}44`,background:checked?C.accent+"18":"transparent"}}>
+                        <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${checked?C.accent:C.border}`,background:checked?C.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#1A1F2E",flexShrink:0,fontWeight:700}}>
+                          {checked&&"✓"}
+                        </div>
+                        <span style={{fontSize:14,color:checked?C.accent:C.text}}>{name}</span>
+                      </div>
+                    );
+                  })}
+                {allWorkers.filter(name => !entries.some(e => e.worker_name===name && e.entry_date===filterDate)).length === 0 && (
+                  <div style={{padding:12,color:C.muted,fontSize:12,textAlign:"center"}}>全員すでに追加済みです</div>
+                )}
+              </div>
+            </>}
+
+            {/* 新規入力 */}
+            <div style={{fontSize:12,color:C.muted,marginBottom:6}}>新規入力（リストにない場合）</div>
+            <input type="text" placeholder="例：山田 太郎" value={newWorkerName}
               onChange={e=>{setNewWorkerName(e.target.value);setWorkerNameErr("");}}
               onKeyDown={e=>e.key==="Enter"&&addWorker()}
-              style={{...bInp,marginBottom:workerNameErr?4:18}}/>
-            {workerNameErr&&<div style={{color:C.red,fontSize:12,marginBottom:10}}>{workerNameErr}</div>}
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>{setWorkerModal(false);setNewWorkerName("");setWorkerNameErr("");}}
+              style={{...bInp,marginBottom:workerNameErr?4:12}}/>
+            {workerNameErr&&<div style={{color:C.red,fontSize:12,marginBottom:8}}>{workerNameErr}</div>}
+
+            {/* 選択中の表示 */}
+            {(selectedWorkers.length > 0 || newWorkerName.trim()) && (
+              <div style={{fontSize:11,color:C.accent,marginBottom:10}}>
+                追加予定：{[...selectedWorkers, newWorkerName.trim()].filter(Boolean).join("、")}
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:8,marginTop:"auto"}}>
+              <button onClick={()=>{setWorkerModal(false);setNewWorkerName("");setWorkerNameErr("");setSelectedWorkers([]);}}
                 style={{flex:1,padding:"8px 0",borderRadius:7,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,cursor:"pointer",fontWeight:600,fontSize:13}}>キャンセル</button>
               <button onClick={addWorker}
-                style={{flex:2,padding:"8px 0",borderRadius:7,border:"none",background:C.accent,color:"#1A1F2E",cursor:"pointer",fontWeight:700,fontSize:13}}>追加する</button>
+                style={{flex:2,padding:"8px 0",borderRadius:7,border:"none",background:C.accent,color:"#1A1F2E",cursor:"pointer",fontWeight:700,fontSize:13}}>
+                追加する{(selectedWorkers.length+(newWorkerName.trim()?1:0))>0?`（${selectedWorkers.length+(newWorkerName.trim()?1:0)}名）`:""}
+              </button>
             </div>
           </div>
         </div>
