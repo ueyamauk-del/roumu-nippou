@@ -246,17 +246,26 @@ const exportSiteExcel = (entries, machines, dateFrom, dateTo) => {
     const siteEntries = range.filter(e => (e.site||"").trim()===site && e.attendance==="出勤");
     const cntRow = [site, "出勤人数"];
     const nameRow = ["", "作業員"];
+    const otRow = ["", "残業時間"];
     let total = 0;
+    let totalOT = 0;
     dates.forEach(d => {
       const dayEntries = siteEntries.filter(e => e.entry_date===d);
       cntRow.push(dayEntries.length > 0 ? dayEntries.length : "");
       nameRow.push(dayEntries.map(e => e.worker_name.split(" ")[0]).join("・") || "");
+      const otLines = dayEntries
+        .filter(e => parseFloat(e.overtime_hours) > 0)
+        .map(e => e.worker_name.split(" ")[0] + ":" + parseFloat(e.overtime_hours).toFixed(1) + "h");
+      otRow.push(otLines.join(" ") || "");
       total += dayEntries.length;
+      totalOT += dayEntries.reduce((s,e)=>s+(parseFloat(e.overtime_hours)||0),0);
     });
     cntRow.push(total);
     nameRow.push("");
+    otRow.push(totalOT > 0 ? totalOT.toFixed(1) + "h" : "");
     wsData.push(cntRow);
     wsData.push(nameRow);
+    wsData.push(otRow);
   });
 
   // 合計行
@@ -265,7 +274,9 @@ const exportSiteExcel = (entries, machines, dateFrom, dateTo) => {
     const cnt = range.filter(e => e.entry_date===d && e.attendance==="出勤" && (e.site||"").trim()).length;
     totalRow.push(cnt > 0 ? cnt : "");
   });
-  totalRow.push(range.filter(e => e.attendance==="出勤" && (e.site||"").trim()).length);
+  const grandTotal = range.filter(e => e.attendance==="出勤" && (e.site||"").trim()).length;
+  const grandOT = range.filter(e => e.attendance==="出勤").reduce((s,e)=>s+(parseFloat(e.overtime_hours)||0),0);
+  totalRow.push(grandTotal + "人日" + (grandOT > 0 ? " / 残業" + grandOT.toFixed(1) + "h" : ""));
   wsData.push(totalRow);
 
   // 稼働機械シート
@@ -367,9 +378,14 @@ const printSitePDF = (entries, machines, dateFrom, dateTo, setPdfPreview) => {
   });
   L.push('<th class="sum-col">出勤<br>人日</th></tr></thead><tbody>');
 
+  // CSSに残業時間行を追加
+  L.push('.ot-site-row td{height:13px;font-size:8px;color:#c60;padding:1px;border-top:none;}');
+  L.push('.ot-site-row .site-col{font-size:8px;color:#888;font-weight:400;border-top:none;}');
+
   sites.forEach(site => {
     const siteEntries = range.filter(e => (e.site||"").trim() === site && e.attendance === "出勤");
     const totalPersonDays = siteEntries.length;
+    const totalSiteOT = siteEntries.reduce((s,e)=>s+(parseFloat(e.overtime_hours)||0),0);
 
     // 出勤人数行
     L.push('<tr class="cnt-row"><td class="site-col">' + site + '</td>');
@@ -383,16 +399,31 @@ const printSitePDF = (entries, machines, dateFrom, dateTo, setPdfPreview) => {
     });
     L.push('<td class="sum-col">' + totalPersonDays + '</td></tr>');
 
-    // 作業員名行（省略表示）
+    // 作業員名行
     L.push('<tr class="names-row"><td class="site-col">↳作業員</td>');
     dates.forEach(d => {
       const dd = new Date(d);
       const dow = dd.getDay();
       const cls = dow===0?"sun":dow===6?"sat":"";
-      const names = siteEntries.filter(e => e.entry_date === d).map(e => e.worker_name.split(" ")[0]);
+      const dayEntries = siteEntries.filter(e => e.entry_date === d);
+      const names = dayEntries.map(e => e.worker_name.split(" ")[0]);
       L.push('<td class="day-col ' + cls + '" style="font-size:7px;line-height:1.2;">' + names.join("<br>") + '</td>');
     });
     L.push('<td class="sum-col"></td></tr>');
+
+    // 残業時間行（作業員ごと）
+    L.push('<tr class="ot-site-row"><td class="site-col">↳残業時間</td>');
+    dates.forEach(d => {
+      const dd = new Date(d);
+      const dow = dd.getDay();
+      const cls = dow===0?"sun":dow===6?"sat":"";
+      const dayEntries = siteEntries.filter(e => e.entry_date === d);
+      const otLines = dayEntries
+        .filter(e => parseFloat(e.overtime_hours) > 0)
+        .map(e => e.worker_name.split(" ")[0] + ":" + parseFloat(e.overtime_hours).toFixed(1));
+      L.push('<td class="day-col ' + cls + '" style="font-size:7px;line-height:1.2;">' + otLines.join("<br>") + '</td>');
+    });
+    L.push('<td class="sum-col" style="color:#c60;font-size:9px;">' + (totalSiteOT>0?totalSiteOT.toFixed(1)+"h":"") + '</td></tr>');
   });
 
   // 合計行
@@ -405,7 +436,8 @@ const printSitePDF = (entries, machines, dateFrom, dateTo, setPdfPreview) => {
     L.push('<td class="day-col ' + cls + '">' + (cnt>0?cnt:"") + '</td>');
   });
   const total = range.filter(e => e.attendance==="出勤" && (e.site||"").trim()).length;
-  L.push('<td class="sum-col">' + total + '</td></tr></tfoot></table>');
+  const totalOT = range.filter(e => e.attendance==="出勤").reduce((s,e)=>s+(parseFloat(e.overtime_hours)||0),0);
+  L.push('<td class="sum-col">' + total + '人日<br><span style="color:#c60;font-size:8px;">' + (totalOT>0?totalOT.toFixed(1)+'h残業':"") + '</span></td></tr></tfoot></table>');
 
   // 稼働機械一覧
   L.push('<div class="section">稼働機械一覧</div>');
