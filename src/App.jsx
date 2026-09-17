@@ -586,6 +586,10 @@ const printPDF = (entries, machines, dateFrom, dateTo, mode, setPdfPreview) => {
 
 // ── メインアプリ ──────────────────────────────────────────
 export default function App() {
+  const PASSWORD = "uk4545";
+  const [isAuthed, setIsAuthed] = useState(() => sessionStorage.getItem("roumu_auth") === "ok");
+  const [pwInput, setPwInput] = useState("");
+  const [pwError, setPwError] = useState("");
   const [view, setView] = useState("attendance");
   const [entries, setEntries] = useState([]);
   const [machines, setMachines] = useState([]);
@@ -796,6 +800,55 @@ export default function App() {
     const allMids = [...new Set(range.flatMap(e => e.machine_ids||[]))];
     return { range, dates, byDate, byName, bySite, totalOT, workedCount, allMids };
   }, [entries, rangeFrom, rangeTo]);
+
+  // ログイン画面
+  if (!isAuthed) {
+    return (
+      <div style={{minHeight:"100vh",background:"#1A1F2E",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Noto Sans JP','Hiragino Sans',sans-serif"}}>
+        <div style={{background:"#232A3B",border:"1px solid #3A4460",borderRadius:16,padding:36,width:"90%",maxWidth:360,boxShadow:"0 20px 60px #0008"}}>
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <div style={{fontSize:36,marginBottom:8}}>🏗</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#E8A838"}}>労務日報</div>
+            <div style={{fontSize:12,color:"#8A94AE",marginTop:4}}>有限会社カネヤマ上山建設</div>
+          </div>
+          <div style={{fontSize:13,color:"#8A94AE",marginBottom:6}}>パスワード</div>
+          <input
+            type="password"
+            placeholder="パスワードを入力"
+            value={pwInput}
+            onChange={e=>{setPwInput(e.target.value);setPwError("");}}
+            onKeyDown={e=>{
+              if(e.key==="Enter"){
+                if(pwInput===PASSWORD){
+                  sessionStorage.setItem("roumu_auth","ok");
+                  setIsAuthed(true);
+                } else {
+                  setPwError("パスワードが違います");
+                  setPwInput("");
+                }
+              }
+            }}
+            style={{width:"100%",boxSizing:"border-box",background:"#1A1F2E",border:"1px solid #3A4460",borderRadius:8,color:"#E8ECF4",padding:"10px 14px",fontSize:16,outline:"none",marginBottom:pwError?6:16}}
+            autoFocus
+          />
+          {pwError && <div style={{color:"#F26464",fontSize:12,marginBottom:12}}>{pwError}</div>}
+          <button
+            onClick={()=>{
+              if(pwInput===PASSWORD){
+                sessionStorage.setItem("roumu_auth","ok");
+                setIsAuthed(true);
+              } else {
+                setPwError("パスワードが違います");
+                setPwInput("");
+              }
+            }}
+            style={{width:"100%",padding:"12px 0",borderRadius:8,border:"none",background:"#E8A838",color:"#1A1F2E",fontWeight:700,fontSize:16,cursor:"pointer"}}>
+            ログイン
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const navBtn=(active)=>({
     flex:1,
